@@ -23,9 +23,30 @@ from pathlib import Path
 
 import jiwer
 import meeteval.wer
+from meeteval.wer.matching.cy_levenshtein import levenshtein_distance
+from meeteval.wer.wer.cp import _minimum_permutation_assignment
 from pyannote.core import Annotation, Segment
 from pyannote.metrics.diarization import DiarizationErrorRate
 from whisper_normalizer.english import EnglishTextNormalizer
+
+# meeteval's sanity limit; Earnings-21 has a 20-speaker call, so a diarizer can
+# legitimately exceed it
+MEETEVAL_MAX_SPEAKERS = 20
+
+
+def cp_errors(ref: dict[str, str], hyp: dict[str, str]) -> tuple[int, int]:
+    """cpWER errors and reference word count for one file"""
+    if max(len(ref), len(hyp)) <= MEETEVAL_MAX_SPEAKERS:
+        cp = meeteval.wer.cp_word_error_rate(ref, hyp)
+        return cp.errors, cp.length
+
+    # the same Hungarian assignment and Levenshtein distance meeteval uses behind
+    # the guard; with string inputs that is all cp_word_error_rate adds
+    ref_words = {speaker: text.split() for speaker, text in ref.items()}
+    hyp_words = {speaker: text.split() for speaker, text in hyp.items()}
+    _, errors, _ = _minimum_permutation_assignment(ref_words, hyp_words, levenshtein_distance, [])
+    return errors, sum(len(t.split()) for t in ref.values())
+
 
 NLP = Path("/shared/datasets/earnings21/nlp_references")
 RTTM = Path("/home/praveen/code/speakrs/fixtures/datasets/earnings21/rttm")
@@ -68,7 +89,7 @@ def main() -> None:
         ref_speakers[stem] = {s: norm(" ".join(t)) for s, t in by_speaker.items()}
 
     for run in args.runs:
-        hyp_text, cp_errors, cp_length, lines = {}, 0, 0, []
+        hyp_text, cp_error_total, cp_length, lines = {}, 0, 0, []
         speaker_counts = []
         der = DiarizationErrorRate(collar=0.0, skip_overlap=False)
         for stem in stems:
@@ -78,13 +99,13 @@ def main() -> None:
             for turn in turns:
                 by_speaker[str(turn["speaker"])].append(turn["text"])
             hyp_speakers = {s: norm(" ".join(t)) for s, t in by_speaker.items()}
-            cp = meeteval.wer.cp_word_error_rate(ref_speakers[stem], hyp_speakers)
-            cp_errors += cp.errors
-            cp_length += cp.length
+            errors, length = cp_errors(ref_speakers[stem], hyp_speakers)
+            cp_error_total += errors
+            cp_length += length
             speaker_counts.append((len(ref_speakers[stem]), len(hyp_speakers)))
             der(rttm(RTTM / f"{stem}.rttm"), rttm(run / f"{stem}.rttm"))
             if args.per_file:
-                lines.append(f"  {stem} cpWER {100 * cp.error_rate:.2f}% speakers {len(ref_speakers[stem])} -> {len(hyp_speakers)}")
+                lines.append(f"  {stem} cpWER {100 * errors / max(length, 1):.2f}% speakers {len(ref_speakers[stem])} -> {len(hyp_speakers)}")
 
         wer = jiwer.process_words([ref_text[s] for s in stems], [hyp_text[s] for s in stems]).wer
         exact = sum(ref == hyp for ref, hyp in speaker_counts)
@@ -92,7 +113,7 @@ def main() -> None:
         rtfx = json.loads(summary.read_text()).get("rtfx") if summary.exists() else None
         speed = f"  RTFx {rtfx:.0f}x" if rtfx else ""
         print(
-            f"{run}: WER {100 * wer:.2f}%  cpWER {100 * cp_errors / cp_length:.2f}%  "
+            f"{run}: WER {100 * wer:.2f}%  cpWER {100 * cp_error_total / cp_length:.2f}%  "
             f"DER {100 * abs(der):.2f}%  speaker count exact {exact}/{len(stems)}"
             f"{speed} over {len(stems)} files"
         )
