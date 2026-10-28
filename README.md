@@ -51,3 +51,14 @@ On all 44 Earnings-21 earnings calls (39 hours) on one RTX 5090, end to end
 WER and cpWER use Whisper's English normalizer. cpWER pools each speaker's words
 against the reference speakers, since the Earnings-21 references have no word
 times. DER uses a zero collar and scores overlapped speech.
+
+### Speed relative to WhisperX
+
+Wall time for all 44 calls, with WhisperX as 1x:
+
+| Pipeline | Wall time | vs WhisperX |
+|---|---:|---:|
+| WhisperX 3.8.6, large-v3 + pyannote community-1 | 29 min 44 s | 1x |
+| dialogrs, Parakeet v3 + speakrs `cuda` | 1 min 41 s | **17.7x** |
+| dialogrs, Parakeet v2 + speakrs `cuda` | 1 min 39 s | **18.0x** |
+| dialogrs, Parakeet v3 + speakrs `cuda-fast` | 1 min 18 s | **23.0x** |
