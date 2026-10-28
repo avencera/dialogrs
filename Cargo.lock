@@ -250,6 +250,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "cudakit"
+version = "0.1.0"
+source = "git+https://github.com/avencera/cudakit?rev=9dfb1acb294e3c299ba5d639a7a4f4af613830ad#9dfb1acb294e3c299ba5d639a7a4f4af613830ad"
+dependencies = [
+ "cudarc",
+ "libloading",
+ "sha2",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "cudarc"
 version = "0.19.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1707,7 +1719,7 @@ name = "scriptrs"
 version = "0.2.0"
 dependencies = [
  "block2",
- "cudakit",
+ "cudakit 0.1.0 (git+https://github.com/avencera/cudakit?rev=9dfb1acb294e3c299ba5d639a7a4f4af613830ad)",
  "memmap2",
  "ndarray",
  "objc2",
@@ -1854,7 +1866,7 @@ name = "speakrs"
 version = "0.7.0"
 dependencies = [
  "crossbeam-channel",
- "cudakit",
+ "cudakit 0.1.0",
  "cudarc",
  "getrandom 0.3.4",
  "hf-hub",
