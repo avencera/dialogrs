@@ -35,7 +35,12 @@ def turns_from_words(segments: list[dict]) -> list[dict]:
     turns: list[dict] = []
     speaker = None
     for segment in segments:
-        for word in segment.get("words", []):
+        # a segment whose alignment failed has text but no words; keep its text so
+        # scoring doesn't count correctly transcribed speech as deletions
+        words = segment.get("words") or [
+            {"word": segment["text"].strip(), "start": segment["start"], "end": segment["end"]}
+        ]
+        for word in words:
             # unaligned words (digits, symbols) have no times or speaker of their own
             speaker = word.get("speaker", segment.get("speaker", speaker))
             start = word.get("start", turns[-1]["end"] if turns else segment["start"])
