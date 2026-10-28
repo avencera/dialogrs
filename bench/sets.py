@@ -8,7 +8,7 @@ sources), `rttm/<id>.rttm` and `ref/<id>.json`: {"segments": [{"speaker", "start
 | Set | Recordings | Kind |
 |---|---|---|
 | earnings21 | 44 calls | earnings calls, many speakers, long turns |
-| ami-ihm | 34 meetings | 4-5 person meetings, headset mix |
+| ami-ihm | 34 meetings | 3 or 4 person meetings, headset mix |
 | ami-sdm | 34 meetings | the same meetings, one far-field array mic |
 | edacc | 40 test recordings | accented English conversations, 2 people |
 | chime6 | 4 eval sessions | dinner parties, far-field, 4 people |
