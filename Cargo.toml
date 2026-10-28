@@ -1,0 +1,26 @@
+[package]
+name = "dialogrs"
+version = "0.1.0"
+edition = "2024"
+description = "Speaker-attributed transcription: scriptrs for what was said, speakrs for who said it"
+license = "Apache-2.0"
+repository = "https://github.com/avencera/dialogrs"
+# path dependencies until cudakit, speakrs and scriptrs publish their CUDA backends
+publish = false
+
+[features]
+default = []
+cuda = ["scriptrs/cuda", "speakrs/cuda"]
+
+[dependencies]
+# speakrs and scriptrs each depend on cudakit by path (`../cudakit` and
+# `../cudakit-pin`, the same commit), so this build carries two copies until the
+# crates.io releases; neither passes cudakit types to the other
+scriptrs = { path = "../scriptrs", default-features = false, features = ["long-form"] }
+speakrs = { path = "../speakrs" }
+thiserror = "2"
+
+[dev-dependencies]
+eyre = "0.6"
+hound = "3.5"
+serde_json = "1"
