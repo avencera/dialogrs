@@ -5,7 +5,9 @@
 //! file from preloaded audio to attributed turns. Writes, per file, `<id>.json`
 //! (turns: speaker, start, end, text) and `<id>.rttm` (diarization with overlap,
 //! for DER), plus `texts.json` ({id: text}, for scriptrs' `long_wer.py`) and
-//! `summary.json`; the WhisperX baseline in `bench/whisperx` writes the same layout
+//! `summary.json`; the WhisperX baseline in `bench/whisperx` writes the same layout.
+//! `--language <code>` decodes with that language's filter (v3), as WhisperX's
+//! `language` does, instead of automatic language selection
 //!
 //! ```sh
 //! cargo run --release --features cuda --example bench -- \
@@ -20,7 +22,10 @@ use std::time::Instant;
 
 use dialogrs::{Dialog, DialogPipeline};
 use eyre::{Result, bail, eyre};
-use scriptrs::{LongFormTranscriptionPipeline, ModelBundle, ParakeetDeployment, Precision};
+use scriptrs::{
+    LanguageSelection, LongFormConfig, LongFormTranscriptionPipeline, ModelBundle,
+    ParakeetDeployment, ParakeetLanguage, Precision,
+};
 use serde_json::json;
 use speakrs::{ExecutionMode, OwnedDiarizationPipeline};
 
@@ -28,6 +33,7 @@ struct Args {
     models: PathBuf,
     deployment: ParakeetDeployment,
     precision: Precision,
+    language: LanguageSelection,
     mode: ExecutionMode,
     wavs: PathBuf,
     out: PathBuf,
@@ -39,9 +45,12 @@ fn main() -> Result<()> {
     fs::create_dir_all(&args.out)?;
     let bundle = ModelBundle::from_native_dir(&args.models, args.deployment.clone())
         .with_precision(args.precision);
+    let mut config = LongFormConfig::for_bundle(&bundle);
+    config.transcription.language = args.language;
     let transcriber = LongFormTranscriptionPipeline::from_bundle(bundle)?;
     let diarizer = OwnedDiarizationPipeline::from_pretrained(args.mode)?;
-    let mut pipeline = DialogPipeline::new(transcriber, diarizer);
+    let mut pipeline =
+        DialogPipeline::new(transcriber, diarizer).with_transcription_config(config);
 
     let mut paths: Vec<PathBuf> = fs::read_dir(&args.wavs)?
         .map(|entry| entry.map(|entry| entry.path()))
@@ -172,6 +181,7 @@ fn parse_args() -> Result<Args> {
     let mut models = None;
     let mut deployment = ParakeetDeployment::v3();
     let mut precision = Precision::default();
+    let mut language = LanguageSelection::Auto;
     let mut mode = ExecutionMode::Cuda;
     let mut wavs = None;
     let mut out = None;
@@ -189,6 +199,12 @@ fn parse_args() -> Result<Args> {
                 }
             }
             "--fp32" => precision = Precision::Fp32,
+            "--language" => {
+                let code = value()?;
+                let parsed = ParakeetLanguage::from_code(&code)
+                    .ok_or_else(|| eyre!("unknown language {code}"))?;
+                language = LanguageSelection::Language(parsed);
+            }
             "--diarization" => {
                 mode = match value()?.as_str() {
                     "cuda" => ExecutionMode::Cuda,
@@ -207,6 +223,7 @@ fn parse_args() -> Result<Args> {
         models: models.ok_or_else(|| eyre!("--models is required"))?,
         deployment,
         precision,
+        language,
         mode,
         wavs: wavs.ok_or_else(|| eyre!("--wavs is required"))?,
         out: out.ok_or_else(|| eyre!("--out is required"))?,

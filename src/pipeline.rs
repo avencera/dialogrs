@@ -1,7 +1,7 @@
 use std::panic;
 use std::thread;
 
-use scriptrs::{LongFormTranscriptionPipeline, TranscriptionError};
+use scriptrs::{LongFormConfig, LongFormTranscriptionPipeline, TranscriptionError};
 use speakrs::{OwnedDiarizationPipeline, PipelineError, Segment};
 
 use crate::attribution::{Turn, assign_speakers};
@@ -32,6 +32,7 @@ pub enum DialogError {
 pub struct DialogPipeline {
     transcriber: LongFormTranscriptionPipeline,
     diarizer: OwnedDiarizationPipeline,
+    config: Option<LongFormConfig>,
 }
 
 impl DialogPipeline {
@@ -42,7 +43,18 @@ impl DialogPipeline {
         Self {
             transcriber,
             diarizer,
+            config: None,
         }
+    }
+
+    /// Transcribe with `config` instead of the transcriber's defaults, for example
+    /// to decode with one language's filter
+    ///
+    /// Start from `LongFormConfig::for_bundle` so a native bundle keeps its batched
+    /// windows
+    pub fn with_transcription_config(mut self, config: LongFormConfig) -> Self {
+        self.config = Some(config);
+        self
     }
 
     /// Transcribes and diarizes `audio` (mono f32 at 16 kHz) at the same time, then
@@ -53,8 +65,12 @@ impl DialogPipeline {
     pub fn run(&mut self, audio: &[f32]) -> Result<Dialog, DialogError> {
         // the transcriber is `Send` but not `Sync`, so its thread borrows it mutably
         let (transcriber, diarizer) = (&mut self.transcriber, &mut self.diarizer);
+        let config = self.config.as_ref();
         let (transcription, diarization) = thread::scope(|scope| {
-            let asr = scope.spawn(move || transcriber.run(audio));
+            let asr = scope.spawn(move || match config {
+                Some(config) => transcriber.run_with_config(audio, config),
+                None => transcriber.run(audio),
+            });
             let diarization = diarizer.run(audio);
             let transcription = asr
                 .join()
