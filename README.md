@@ -43,10 +43,9 @@ On all 44 Earnings-21 earnings calls (39 hours) on one RTX 5090, end to end
 
 | Pipeline | WER | cpWER | DER | Speed (x real time) |
 |---|---|---|---|---|
-| dialogrs, Parakeet v3 TF32 + speakrs `cuda-fast` | 8.24% | **15.77%** | **9.21%** | **1822x** |
-| dialogrs, Parakeet v3 TF32 + speakrs `cuda` | 8.24% | 16.66% | 9.69% | 1401x |
-| dialogrs, Parakeet v3 FP32 + speakrs `cuda` | 8.25% | 16.66% | 9.69% | 1082x |
-| dialogrs, Parakeet v2 TF32 + speakrs `cuda` | 10.17% | 18.09% | 9.69% | 1425x |
+| dialogrs, Parakeet v3 + speakrs `cuda-fast` | 8.24% | **15.77%** | **9.21%** | **1822x** |
+| dialogrs, Parakeet v3 + speakrs `cuda` | 8.24% | 16.66% | 9.69% | 1401x |
+| dialogrs, Parakeet v2 + speakrs `cuda` | 10.17% | 18.09% | 9.69% | 1425x |
 | WhisperX 3.8.6, large-v3 (float16, batch 16) + pyannote community-1 | 9.74% | 17.82% | 9.70% | 79x |
 
 WER and cpWER use Whisper's English normalizer. cpWER pools each speaker's words

@@ -171,7 +171,7 @@ fn load_wav(path: &Path) -> Result<Vec<f32>> {
 fn parse_args() -> Result<Args> {
     let mut models = None;
     let mut deployment = ParakeetDeployment::v3();
-    let mut precision = Precision::Fp32;
+    let mut precision = Precision::default();
     let mut mode = ExecutionMode::Cuda;
     let mut wavs = None;
     let mut out = None;
@@ -188,7 +188,7 @@ fn parse_args() -> Result<Args> {
                     other => bail!("unknown version {other}"),
                 }
             }
-            "--tf32" => precision = Precision::Tf32,
+            "--fp32" => precision = Precision::Fp32,
             "--diarization" => {
                 mode = match value()?.as_str() {
                     "cuda" => ExecutionMode::Cuda,
