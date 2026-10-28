@@ -65,7 +65,8 @@ def rttm(path: Path) -> Annotation:
         parts = line.split()
         if parts and parts[0] == "SPEAKER":
             start, duration = float(parts[3]), float(parts[4])
-            annotation[Segment(start, start + duration)] = parts[7]
+            # one track per speaker, so two speakers with identical times both survive
+            annotation[Segment(start, start + duration), parts[7]] = parts[7]
     return annotation
 
 
@@ -110,8 +111,11 @@ def main() -> None:
         wer = jiwer.process_words([ref_text[s] for s in stems], [hyp_text[s] for s in stems]).wer
         exact = sum(ref == hyp for ref, hyp in speaker_counts)
         summary = run / "summary.json"
-        rtfx = json.loads(summary.read_text()).get("rtfx") if summary.exists() else None
-        speed = f"  RTFx {rtfx:.0f}x" if rtfx else ""
+        summary = json.loads(summary.read_text()) if summary.exists() else {}
+        # the summary's speed covers every file the run timed, so it only describes
+        # these scores when the run timed exactly the scored files
+        timed_same = set(summary.get("walls_s", {})) == set(stems)
+        speed = f"  RTFx {summary['rtfx']:.0f}x" if timed_same and summary.get("rtfx") else ""
         print(
             f"{run}: WER {100 * wer:.2f}%  cpWER {100 * cp_error_total / cp_length:.2f}%  "
             f"DER {100 * abs(der):.2f}%  speaker count exact {exact}/{len(stems)}"
