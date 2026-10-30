@@ -24,3 +24,8 @@ thiserror = "2"
 eyre = "0.6"
 hound = "3.5"
 serde_json = "1"
+
+# native scriptrs bundles and precisions exist only in CUDA builds
+[[example]]
+name = "bench"
+required-features = ["cuda"]
