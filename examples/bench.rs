@@ -49,8 +49,7 @@ fn main() -> Result<()> {
     config.transcription.language = args.language;
     let transcriber = LongFormTranscriptionPipeline::from_bundle(bundle)?;
     let diarizer = OwnedDiarizationPipeline::from_pretrained(args.mode)?;
-    let mut pipeline =
-        DialogPipeline::new(transcriber, diarizer).with_transcription_config(config);
+    let mut pipeline = DialogPipeline::new(transcriber, diarizer).with_transcription_config(config);
 
     let mut paths: Vec<PathBuf> = fs::read_dir(&args.wavs)?
         .map(|entry| entry.map(|entry| entry.path()))
@@ -92,10 +91,8 @@ fn main() -> Result<()> {
         "backend": format!(
             "dialogrs-{:?}-{}-{:?}",
             args.deployment.version(),
-            match args.precision {
-                Precision::Fp32 => "fp32",
-                Precision::Tf32 => "tf32",
-            },
+            // `Precision` is non-exhaustive, so label it by name instead of matching
+            format!("{:?}", args.precision).to_lowercase(),
             args.mode
         ),
         "files": recordings.len(),
