@@ -29,7 +29,9 @@ for turn in &dialog.turns {
 ```
 
 It builds against local checkouts of scriptrs and speakrs for now
-(`../scriptrs`, `../speakrs`), with the `cuda` feature on Linux.
+(`../scriptrs`, `../speakrs`), with the `cuda` feature on Linux. CI clones both
+next to the checkout, on the branch with the same name as the pull request's
+branch or its base when one exists, and on master otherwise.
 
 ## Benchmark
 

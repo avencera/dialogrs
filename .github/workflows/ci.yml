@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - master
+  # every base branch, since a change that spans dialogrs, scriptrs and speakrs
+  # often stacks on a shared feature branch before it reaches master; moving a
+  # PR to another base doesn't rerun CI, since `edited` would also fire on title
+  # edits, and skipped checks from those would count as passing
+  pull_request: {}
+
+permissions:
+  contents: read
+
+# a new push to a pull request supersedes its running checks
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# no RUSTFLAGS=-D warnings: it would also fail on warnings in the scriptrs and
+# speakrs path dependencies, which their own CI gates; clippy denies warnings
+# for dialogrs alone
+env:
+  CARGO_TERM_COLOR: always
+  HEAD_REF: ${{ github.head_ref || github.ref_name }}
+  BASE_REF: ${{ github.base_ref }}
+
+jobs:
+  # builds the CUDA backend; a GitHub runner has no GPU, and nothing here runs on one
+  check:
+    name: Format, clippy and tests (Linux x86_64)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      # Cargo.lock follows whichever sibling branches were cloned, so builds
+      # here are not `--locked`
+      - name: Check out scriptrs and speakrs
+        run: .github/scripts/checkout_siblings.sh
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --features cuda -- -D warnings
+
+      - name: Test
+        run: cargo test --all-targets --features cuda
+
+  msrv:
+    name: MSRV Rust 1.96
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check out scriptrs and speakrs
+        run: .github/scripts/checkout_siblings.sh
+
+      - name: Install Rust 1.96
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: "1.96"
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          prefix-key: v1-rust-msrv
+
+      - name: Check crate
+        run: cargo check --features cuda
