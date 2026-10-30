@@ -14,9 +14,6 @@ default = []
 cuda = ["scriptrs/cuda", "speakrs/cuda"]
 
 [dependencies]
-# speakrs depends on cudakit by path (`../cudakit`) and scriptrs on 0.1 from
-# crates.io, so this build carries two copies until speakrs moves to 0.1 too;
-# neither passes cudakit types to the other
 scriptrs = { path = "../scriptrs", default-features = false, features = ["long-form"] }
 speakrs = { path = "../speakrs" }
 thiserror = "2"
