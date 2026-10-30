@@ -16,6 +16,7 @@ pub struct Turn {
     pub start: f64,
     /// End of the last word in seconds
     pub end: f64,
+    /// The words in time order
     pub words: Vec<Word>,
 }
 
@@ -24,6 +25,11 @@ impl Turn {
     pub fn text(&self) -> String {
         let words: Vec<&str> = self.words.iter().map(|word| word.text.as_str()).collect();
         words.join(" ")
+    }
+
+    fn push(&mut self, word: Word) {
+        self.end = word.end;
+        self.words.push(word);
     }
 }
 
@@ -44,18 +50,17 @@ pub fn assign_speakers(words: &[Word], segments: &[Segment]) -> Vec<Turn> {
         }
 
         let speaker = best_speaker(segments, index, word);
-        let same = turns.last().is_some_and(|turn| turn.speaker == speaker);
-        if same || is_jitter(&turns, &speaker, word.start) {
-            if !same {
-                // word times drift at speaker changes, so the lone word between two
-                // turns of this speaker is theirs
-                let lone = turns.pop().expect("is_jitter needs two turns");
-                let before = turns.last_mut().expect("is_jitter needs two turns");
-                before.words.extend(lone.words);
-            }
-            let turn = turns.last_mut().expect("a turn to extend");
-            turn.words.push(word.clone());
-            turn.end = word.end;
+        if let Some(turn) = turns.last_mut()
+            && turn.speaker == speaker
+        {
+            turn.push(word.clone());
+        } else if is_jitter(&turns, speaker.as_deref(), word.start) {
+            // word times drift at speaker changes, so the lone word between two
+            // turns of this speaker is theirs
+            let lone = turns.pop().expect("is_jitter needs two turns");
+            let before = turns.last_mut().expect("is_jitter needs two turns");
+            before.words.extend(lone.words);
+            before.push(word.clone());
         } else {
             turns.push(Turn {
                 speaker,
@@ -68,12 +73,12 @@ pub fn assign_speakers(words: &[Word], segments: &[Segment]) -> Vec<Turn> {
     turns
 }
 
-fn is_jitter(turns: &[Turn], speaker: &Option<String>, start: f64) -> bool {
+fn is_jitter(turns: &[Turn], speaker: Option<&str>, start: f64) -> bool {
     let [.., before, lone] = turns else {
         return false;
     };
     lone.words.len() == 1
-        && before.speaker == *speaker
+        && before.speaker.as_deref() == speaker
         && (lone.start - before.end).max(start - lone.end) < JITTER_GAP
 }
 
