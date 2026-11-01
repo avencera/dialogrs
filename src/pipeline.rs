@@ -20,10 +20,13 @@ pub struct Dialog {
     pub duration_seconds: f64,
 }
 
+/// Why [`DialogPipeline::run`] failed
 #[derive(Debug, thiserror::Error)]
 pub enum DialogError {
+    /// The scriptrs ASR failed
     #[error("transcription failed: {0}")]
     Transcription(#[from] TranscriptionError),
+    /// The speakrs diarization failed
     #[error("diarization failed: {0}")]
     Diarization(#[from] PipelineError),
 }
@@ -36,6 +39,8 @@ pub struct DialogPipeline {
 }
 
 impl DialogPipeline {
+    /// Pairs a loaded transcriber and diarizer, transcribing with the transcriber's
+    /// default config
     pub fn new(
         transcriber: LongFormTranscriptionPipeline,
         diarizer: OwnedDiarizationPipeline,
@@ -52,6 +57,7 @@ impl DialogPipeline {
     ///
     /// Start from `LongFormConfig::for_bundle` so a native bundle keeps its batched
     /// windows
+    #[must_use]
     pub fn with_transcription_config(mut self, config: LongFormConfig) -> Self {
         self.config = Some(config);
         self

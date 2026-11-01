@@ -21,13 +21,15 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use dialogrs::{Dialog, DialogPipeline};
-use eyre::{Result, bail, eyre};
+use eyre::{Result, WrapErr, bail, eyre};
 use scriptrs::{
     LanguageSelection, LongFormConfig, LongFormTranscriptionPipeline, ModelBundle,
     ParakeetDeployment, ParakeetLanguage, Precision,
 };
 use serde_json::json;
 use speakrs::{ExecutionMode, OwnedDiarizationPipeline};
+
+const SAMPLE_RATE: u32 = 16_000;
 
 struct Args {
     models: PathBuf,
@@ -42,7 +44,7 @@ struct Args {
 
 fn main() -> Result<()> {
     let args = parse_args()?;
-    fs::create_dir_all(&args.out)?;
+    fs::create_dir_all(&args.out).wrap_err_with(|| format!("creating {}", args.out.display()))?;
     let bundle = ModelBundle::from_native_dir(&args.models, args.deployment.clone())
         .with_precision(args.precision);
     let mut config = LongFormConfig::for_bundle(&bundle);
@@ -51,9 +53,13 @@ fn main() -> Result<()> {
     let diarizer = OwnedDiarizationPipeline::from_pretrained(args.mode)?;
     let mut pipeline = DialogPipeline::new(transcriber, diarizer).with_transcription_config(config);
 
-    let mut paths: Vec<PathBuf> = fs::read_dir(&args.wavs)?
-        .map(|entry| entry.map(|entry| entry.path()))
-        .collect::<Result<_, _>>()?;
+    let mut paths: Vec<PathBuf> = fs::read_dir(&args.wavs)
+        .and_then(|entries| {
+            entries
+                .map(|entry| entry.map(|entry| entry.path()))
+                .collect()
+        })
+        .wrap_err_with(|| format!("reading {}", args.wavs.display()))?;
     paths.retain(|path| path.extension().is_some_and(|ext| ext == "wav"));
     paths.sort();
     paths.truncate(args.limit.unwrap_or(paths.len()));
@@ -84,10 +90,10 @@ fn main() -> Result<()> {
 
     let audio_s: f64 = recordings
         .iter()
-        .map(|(_, audio)| audio.len() as f64 / 16_000.0)
+        .map(|(_, audio)| audio.len() as f64 / f64::from(SAMPLE_RATE))
         .sum();
     let wall_s: f64 = walls.values().sum();
-    let summary = json!({
+    let mut summary = json!({
         "backend": format!(
             "dialogrs-{:?}-{}-{:?}",
             args.deployment.version(),
@@ -105,7 +111,6 @@ fn main() -> Result<()> {
         args.out.join("texts.json"),
         serde_json::to_string_pretty(&texts)?,
     )?;
-    let mut summary = summary;
     summary["walls_s"] = json!(walls);
     fs::write(
         args.out.join("summary.json"),
@@ -156,10 +161,14 @@ fn stem(path: &Path) -> Result<String> {
 }
 
 fn load_wav(path: &Path) -> Result<Vec<f32>> {
+    read_samples(path).wrap_err_with(|| format!("loading {}", path.display()))
+}
+
+fn read_samples(path: &Path) -> Result<Vec<f32>> {
     let mut reader = hound::WavReader::open(path)?;
     let spec = reader.spec();
-    if spec.channels != 1 || spec.sample_rate != 16_000 {
-        bail!("{}: need 16 kHz mono", path.display());
+    if spec.channels != 1 || spec.sample_rate != SAMPLE_RATE {
+        bail!("need 16 kHz mono");
     }
 
     Ok(match spec.sample_format {
