@@ -29,7 +29,13 @@ for turn in &dialog.turns {
 ```
 
 It builds against local checkouts of scriptrs and speakrs for now
-(`../scriptrs`, `../speakrs`), with the `cuda` feature on Linux.
+(`../scriptrs`, `../speakrs`), with the `cuda` feature on Linux or Windows
+x86_64.
+
+On Windows, the NVIDIA driver provides `nvcuda.dll`, and the CUDA libraries
+(cuBLAS, and cuDNN for speakrs) must be on `PATH`, for example the toolkit's
+`%CUDA_PATH%\bin\x64`. CI builds and tests dialogrs on Windows, but it hasn't
+yet run on a Windows GPU.
 
 ## Benchmark
 
