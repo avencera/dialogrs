@@ -1,0 +1,250 @@
+# Check the crate as crates.io receives it, and publish it and a GitHub release from
+# a version tag
+#
+# To release:
+#   1. release any scriptrs or speakrs changes dialogrs needs, raise their version
+#      requirements in Cargo.toml to match, and set SCRIPTRS_REF and SPEAKRS_REF
+#      below to those releases' tags
+#   2. set the version in Cargo.toml
+#   3. rename the CHANGELOG.md "Unreleased" section to "[X.Y.Z] - YYYY-MM-DD" and
+#      update the compare links at the bottom
+#   4. merge, then tag the merge commit and push the tag:
+#        git tag vX.Y.Z
+#        git push origin vX.Y.Z
+#
+# The tag checks the crate's version and changelog entry, then the crates-io
+# environment waits for a reviewer. Once approved, the workflow publishes the crate
+# to crates.io, then a GitHub release with the tag's CHANGELOG.md entry as its notes.
+# A tag whose version or changelog entry is wrong fails before anything is published.
+# crates.io trusts this workflow through OIDC, so no token is stored. A version
+# already on crates.io is skipped, so "Re-run failed jobs" finishes a partial release.
+#
+# crates.io accepts a trusted publisher only for a crate that exists, so the first
+# version is published by hand with an API token before its tag is pushed
+
+name: Package
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - master
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  # the cuda build loads every CUDA library at run time and needs no toolkit
+  CUDA_HOME: /nonexistent
+  CUDA_PATH: /nonexistent
+  # cargo needs each path dependency's version to satisfy Cargo.toml's requirement,
+  # so packaging checks out the releases it names rather than master, which may
+  # already carry the next version
+  SCRIPTRS_REF: v0.5.0
+  SPEAKRS_REF: v0.7.0
+
+# dialogrs depends on ../scriptrs and ../speakrs by path, so each job that reads the
+# manifest checks all three out side by side and runs in ./dialogrs
+defaults:
+  run:
+    working-directory: dialogrs
+
+jobs:
+  # the crate as crates.io receives it, built against the scriptrs and speakrs
+  # releases on crates.io rather than the sibling checkouts
+  crate:
+    name: Crate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: dialogrs
+
+      - uses: ./dialogrs/.github/actions/siblings
+        with:
+          scriptrs-ref: ${{ env.SCRIPTRS_REF }}
+          speakrs-ref: ${{ env.SPEAKRS_REF }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+
+      - name: Install just
+        uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
+        with:
+          tool: just
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: dialogrs
+
+      - name: Package and build as a dependency
+        run: just package
+
+  # checks a tag before anything is published: the crate's version must match it, and
+  # CHANGELOG.md needs its entry, which becomes the GitHub release notes
+  release-check:
+    name: Check the tag
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: dialogrs
+
+      # the GitHub release reads its notes with parse-changelog, so the same parser
+      # checks the entry here
+      - name: Install parse-changelog
+        uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
+        with:
+          tool: parse-changelog
+
+      - name: Check the version and changelog
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          crate=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          if [ "$crate" != "$version" ]; then
+            echo "Cargo.toml is $crate but the tag is $GITHUB_REF_NAME"
+            exit 1
+          fi
+          notes="$(parse-changelog CHANGELOG.md "$version")"
+          if [ -z "$notes" ]; then
+            echo "the CHANGELOG.md entry for $version is empty"
+            exit 1
+          fi
+
+  # the crates-io environment's reviewer approves the release here, before anything
+  # is published
+  crates-publish:
+    name: Publish to crates.io
+    needs: [release-check, crate]
+    runs-on: ubuntu-24.04
+    environment:
+      name: crates-io
+      url: https://crates.io/crates/dialogrs
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: dialogrs
+
+      # cargo reads the path dependencies' manifests even though the published crate
+      # depends on their crates.io releases
+      - uses: ./dialogrs/.github/actions/siblings
+        with:
+          scriptrs-ref: ${{ env.SCRIPTRS_REF }}
+          speakrs-ref: ${{ env.SPEAKRS_REF }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+
+      # a rerun after a later job failed finds this version already published
+      - name: Check crates.io for this version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          status="$(curl -sS -o /dev/null -w '%{http_code}' -A 'dialogrs-release (github.com/avencera/dialogrs)' \
+            "https://crates.io/api/v1/crates/dialogrs/$version")"
+          case "$status" in
+            200) echo "dialogrs $version is already on crates.io"; echo "publish=false" >> "$GITHUB_OUTPUT" ;;
+            404) echo "publish=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "crates.io answered HTTP $status" >&2; exit 1 ;;
+          esac
+
+      - name: Get a crates.io token
+        if: steps.version.outputs.publish == 'true'
+        id: auth
+        uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+
+      # speakrs has no backend without cuda, so the verification build turns it on
+      - name: Publish
+        if: steps.version.outputs.publish == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: cargo publish --features cuda
+
+  # the release starts as a draft and is published once it exists in full
+  github-release:
+    name: GitHub release
+    needs: crates-publish
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    # builds nothing, so dialogrs alone is checked out at the workspace root, where
+    # create-gh-release-action expects the repository
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      # create-gh-release-action deletes a release that already exists, so a rerun
+      # leaves a published release alone and finishes a draft instead of recreating it
+      - name: Check for an existing release
+        id: existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if draft="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2> view.err)"; then
+            if [ "$draft" = true ]; then state=draft; else state=published; fi
+          elif grep -q 'release not found' view.err; then
+            state=none
+          else
+            # any other failure could hide a release the next step would delete
+            cat view.err >&2
+            exit 1
+          fi
+          echo "the $GITHUB_REF_NAME release is $state"
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+
+      - name: Create a draft release
+        if: steps.existing.outputs.state == 'none'
+        uses: taiki-e/create-gh-release-action@eba8ea96c86cca8a37f1b56e94b4d13301fba651 # v1.11.0
+        with:
+          draft: true
+          # the tag's CHANGELOG.md entry becomes the release notes
+          changelog: CHANGELOG.md
+
+      # the release becomes latest only when no published stable release has a higher
+      # version, so a maintenance release of an older line leaves the newest as latest
+      - name: Publish the release
+        if: steps.existing.outputs.state != 'published'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          latest=false
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            # a plain assignment, so set -e stops the step when the lookup fails
+            # instead of marking this release latest against an empty list
+            releases="$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases \
+              --limit 1000 --json tagName --jq '.[].tagName')"
+            newest="$(
+              printf '%s\n' "$releases" "$GITHUB_REF_NAME" \
+                | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1
+            )"
+            if [ "$newest" = "$version" ]; then latest=true; fi
+          fi
+          echo "marking $GITHUB_REF_NAME latest: $latest"
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest="$latest" --repo "$GITHUB_REPOSITORY"

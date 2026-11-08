@@ -28,9 +28,18 @@ for turn in &dialog.turns {
 }
 ```
 
-It builds against local checkouts of scriptrs and speakrs for now
-(`../scriptrs`, `../speakrs`), with the `cuda` feature on Linux or Windows
-x86_64.
+dialogrs runs on Linux or Windows x86_64 with an NVIDIA GPU, and needs its
+`cuda` feature:
+
+```toml
+[dependencies]
+dialogrs = { version = "0.1", features = ["cuda"] }
+```
+
+To work on dialogrs itself, check out scriptrs and speakrs beside it
+(`../scriptrs`, `../speakrs`), which it builds against; the published crate
+uses their crates.io releases instead. `just check` runs the same formatting,
+dependency, lint, docs and test checks as CI.
 
 On Windows, the NVIDIA driver provides `nvcuda.dll`. You also need cuBLAS 12 or
 13 and, for speakrs, cuDNN 9. cudakit finds them on `PATH` or under

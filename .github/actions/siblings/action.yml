@@ -1,0 +1,29 @@
+name: Check out scriptrs and speakrs
+description: >-
+  Checks out scriptrs and speakrs beside dialogrs, which depends on them by path;
+  the job checks dialogrs out to ./dialogrs first
+
+inputs:
+  scriptrs-ref:
+    description: scriptrs branch, tag or commit
+    default: master
+  speakrs-ref:
+    description: speakrs branch, tag or commit
+    default: master
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v6
+      with:
+        repository: avencera/scriptrs
+        ref: ${{ inputs.scriptrs-ref }}
+        path: scriptrs
+        persist-credentials: false
+
+    - uses: actions/checkout@v6
+      with:
+        repository: avencera/speakrs
+        ref: ${{ inputs.speakrs-ref }}
+        path: speakrs
+        persist-credentials: false

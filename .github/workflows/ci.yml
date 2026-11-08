@@ -19,6 +19,11 @@ on:
 permissions:
   contents: read
 
+# a new push to a pull request supersedes its running checks
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
@@ -27,58 +32,96 @@ env:
   CUDA_HOME: /nonexistent
   CUDA_PATH: /nonexistent
 
+# dialogrs depends on ../scriptrs and ../speakrs, so every job checks all three out
+# side by side and runs in ./dialogrs
+defaults:
+  run:
+    working-directory: dialogrs
+
 jobs:
-  rust:
-    name: rust (${{ matrix.os }})
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, windows-2025]
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        working-directory: dialogrs
+  # the same gates as `just check`, through its recipes so the two stay in step
+  lint:
+    name: Format and dependencies
+    runs-on: ubuntu-24.04
     steps:
-      # dialogrs depends on ../scriptrs and ../speakrs, so all three are checked out
-      # side by side
       - uses: actions/checkout@v6
         with:
           path: dialogrs
 
-      - uses: actions/checkout@v6
+      - uses: ./dialogrs/.github/actions/siblings
         with:
-          repository: avencera/scriptrs
-          ref: ${{ inputs.scriptrs-ref || 'master' }}
-          path: scriptrs
-
-      - uses: actions/checkout@v6
-        with:
-          repository: avencera/speakrs
-          ref: ${{ inputs.speakrs-ref || 'master' }}
-          path: speakrs
+          scriptrs-ref: ${{ inputs.scriptrs-ref || 'master' }}
+          speakrs-ref: ${{ inputs.speakrs-ref || 'master' }}
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
-          components: clippy, rustfmt
+          toolchain: stable
+          components: rustfmt
 
-      - name: Cache Rust builds
-        uses: Swatinem/rust-cache@v2
+      # a prebuilt cargo-deny instead of cargo-deny-action, whose Docker build fails
+      # whenever Docker Hub rate-limits the runner
+      - name: Install just and cargo-deny
+        uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
+        with:
+          tool: just,cargo-deny@0.20.2
+
+      # `just fmt` rewrites files, so any diff it leaves means the code wasn't formatted
+      - name: Format
+        run: |
+          just fmt
+          git diff --exit-code
+
+      - name: Advisories, licenses and sources
+        run: just deny
+
+  check:
+    name: Clippy and tests (${{ matrix.name }})
+    timeout-minutes: 30
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # cuda only: speakrs has no backend without it, and dialogrs supports no other
+        include:
+          - name: Linux x86_64
+            os: ubuntu-24.04
+          - name: Windows x86_64
+            os: windows-2025
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: dialogrs
+
+      - uses: ./dialogrs/.github/actions/siblings
+        with:
+          scriptrs-ref: ${{ inputs.scriptrs-ref || 'master' }}
+          speakrs-ref: ${{ inputs.speakrs-ref || 'master' }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          components: clippy
+
+      - name: Install just
+        uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
+        with:
+          tool: just
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-bin: false
           prefix-key: v1-rust
           workspaces: dialogrs
 
-      - name: Format
-        if: runner.os == 'Linux'
-        run: cargo fmt --check
-
-      # cuda only: off macOS, speakrs has no backend without it. Not --locked, since
-      # the lockfile follows the sibling checkouts' master, which moves
       - name: Clippy
-        run: cargo clippy --all-targets --features cuda -- -D warnings
+        run: just clippy
 
-      # unit tests only; the pipeline itself needs a GPU and models
+      # docs.rs builds on Linux with the cuda feature
+      - name: Docs as docs.rs builds them
+        if: runner.os == 'Linux'
+        run: just doc
+
       - name: Test
-        run: cargo test --features cuda --lib
+        run: just test

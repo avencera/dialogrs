@@ -3,19 +3,32 @@ name = "dialogrs"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.96"
+# the benchmark scripts and their results stay in the repository
+exclude = ["bench/", "assets/", "greptile.json"]
+authors = ["Praveen Perera"]
 description = "Speaker-attributed transcription: scriptrs for what was said, speakrs for who said it"
 license = "Apache-2.0"
 repository = "https://github.com/avencera/dialogrs"
-# path dependencies until cudakit, speakrs and scriptrs publish their CUDA backends
-publish = false
+homepage = "https://github.com/avencera/dialogrs"
+documentation = "https://docs.rs/dialogrs"
+readme = "README.md"
+keywords = ["speech-to-text", "diarization", "transcription", "parakeet", "cuda"]
+categories = ["multimedia::audio"]
+
+# speakrs has no backend without cuda, so docs.rs builds with it; the CUDA code
+# builds without a toolkit because CUDA loads at run time
+[package.metadata.docs.rs]
+features = ["cuda"]
 
 [features]
 default = []
 cuda = ["scriptrs/cuda", "speakrs/cuda"]
 
 [dependencies]
-scriptrs = { path = "../scriptrs", default-features = false, features = ["long-form"] }
-speakrs = { path = "../speakrs" }
+# local builds and CI use the sibling checkouts; the published crate uses these
+# versions from crates.io, so each must be one the sibling's Cargo.toml satisfies
+scriptrs = { path = "../scriptrs", version = "0.5", default-features = false, features = ["long-form"] }
+speakrs = { path = "../speakrs", version = "0.7" }
 thiserror = "2"
 
 [dev-dependencies]
