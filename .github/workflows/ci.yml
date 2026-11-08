@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      scriptrs-ref:
+        description: scriptrs branch, tag or commit to build against
+        default: master
+      speakrs-ref:
+        description: speakrs branch, tag or commit to build against
+        default: master
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  # runners have no CUDA toolkit or driver; the cuda build loads every CUDA library
+  # at run time, so pointing CUDA_HOME nowhere proves it never looks for one
+  CUDA_HOME: /nonexistent
+  CUDA_PATH: /nonexistent
+
+jobs:
+  rust:
+    name: rust (${{ matrix.os }})
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: dialogrs
+    steps:
+      # dialogrs depends on ../scriptrs and ../speakrs, so all three are checked out
+      # side by side
+      - uses: actions/checkout@v6
+        with:
+          path: dialogrs
+
+      - uses: actions/checkout@v6
+        with:
+          repository: avencera/scriptrs
+          ref: ${{ inputs.scriptrs-ref || 'master' }}
+          path: scriptrs
+
+      - uses: actions/checkout@v6
+        with:
+          repository: avencera/speakrs
+          ref: ${{ inputs.speakrs-ref || 'master' }}
+          path: speakrs
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
+          prefix-key: v1-rust
+          workspaces: dialogrs
+
+      - name: Format
+        if: runner.os == 'Linux'
+        run: cargo fmt --check
+
+      # cuda only: off macOS, speakrs has no backend without it. Not --locked, since
+      # the lockfile follows the sibling checkouts' master, which moves
+      - name: Clippy
+        run: cargo clippy --all-targets --features cuda -- -D warnings
+
+      # unit tests only; the pipeline itself needs a GPU and models
+      - name: Test
+        run: cargo test --features cuda --lib

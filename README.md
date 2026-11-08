@@ -29,7 +29,14 @@ for turn in &dialog.turns {
 ```
 
 It builds against local checkouts of scriptrs and speakrs for now
-(`../scriptrs`, `../speakrs`), with the `cuda` feature on Linux.
+(`../scriptrs`, `../speakrs`), with the `cuda` feature on Linux or Windows
+x86_64.
+
+On Windows, the NVIDIA driver provides `nvcuda.dll`. You also need cuBLAS 12 or
+13 and, for speakrs, cuDNN 9. cudakit finds them on `PATH` or under
+`%CUDA_PATH%`, as its
+[Windows notes](https://github.com/avencera/cudakit#windows) describe. CI
+builds and tests dialogrs on Windows, but it hasn't yet run on a Windows GPU.
 
 ## Benchmark
 

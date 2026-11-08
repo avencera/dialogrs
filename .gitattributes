@@ -1,0 +1,2 @@
+# lf everywhere, so a Windows checkout runs the bench shell scripts and matches Linux byte for byte
+* text=auto eol=lf
