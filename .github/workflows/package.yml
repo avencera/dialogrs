@@ -86,8 +86,11 @@ jobs:
         with:
           workspaces: dialogrs
 
+      # Cargo.lock follows the siblings' master, so resolving against their release
+      # tags rewrites it, and cargo refuses a dirty checkout without --allow-dirty.
+      # The fresh checkout has nothing else to dirty it
       - name: Package and build as a dependency
-        run: just package
+        run: just package --allow-dirty
 
   # checks a tag before anything is published: the crate's version must match it, and
   # CHANGELOG.md needs its entry, which becomes the GitHub release notes
@@ -171,12 +174,13 @@ jobs:
         id: auth
         uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
 
-      # speakrs has no backend without cuda, so the verification build turns it on
+      # speakrs has no backend without cuda, so the verification build turns it on;
+      # --allow-dirty for the rewritten Cargo.lock, as in the crate job
       - name: Publish
         if: steps.version.outputs.publish == 'true'
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-        run: cargo publish --features cuda
+        run: cargo publish --features cuda --allow-dirty
 
   # the release starts as a draft and is published once it exists in full
   github-release:
