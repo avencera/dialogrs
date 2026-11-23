@@ -28,7 +28,7 @@ cuda = ["scriptrs/cuda", "speakrs/cuda"]
 # local builds and CI use the sibling checkouts; the published crate uses these
 # versions from crates.io, so each must be one the sibling's Cargo.toml satisfies
 scriptrs = { path = "../scriptrs", version = "0.5", default-features = false, features = ["long-form"] }
-speakrs = { path = "../speakrs", version = "0.7" }
+speakrs = { path = "../speakrs", version = "0.8" }
 thiserror = "2"
 
 [dev-dependencies]

@@ -28,6 +28,17 @@ for turn in &dialog.turns {
 }
 ```
 
+`dialog.speakers` gives each speaker label a voice embedding for matching the same
+person across recordings: the L2-normalised mean of the speaker's 256-d chunk
+embeddings from speakrs, with the number of embeddings and the seconds of speech
+behind it, to weight it by:
+
+```rust,ignore
+for speaker in &dialog.speakers {
+    println!("{}: {:.0} s from {} embeddings", speaker.label, speaker.speech_seconds, speaker.chunk_count);
+}
+```
+
 dialogrs runs on Linux or Windows x86_64 with an NVIDIA GPU, and needs its
 `cuda` feature:
 

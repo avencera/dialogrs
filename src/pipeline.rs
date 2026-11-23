@@ -2,7 +2,7 @@ use std::panic;
 use std::thread;
 
 use scriptrs::{LongFormConfig, LongFormTranscriptionPipeline, TranscriptionError};
-use speakrs::{OwnedDiarizationPipeline, PipelineError, Segment};
+use speakrs::{OwnedDiarizationPipeline, PipelineError, Segment, SpeakerCentroid};
 
 use crate::attribution::{Turn, assign_speakers};
 use crate::words::words_from_tokens;
@@ -16,6 +16,14 @@ pub struct Dialog {
     pub text: String,
     /// Diarization with overlapping speech kept, for RTTM output and DER
     pub segments: Vec<Segment>,
+    /// Each speaker's voice embedding, in label order, for matching speakers across
+    /// recordings: a 256-d L2-normalised mean of the speaker's chunk embeddings,
+    /// with the chunk count and speech seconds behind it
+    ///
+    /// Labels match [`Turn::speaker`] and [`Segment::speaker`]. A label has no
+    /// centroid only when no usable embedding went into its cluster; see
+    /// [`speakrs::DiarizationResult::speaker_centroids`]
+    pub speakers: Vec<SpeakerCentroid>,
     /// Input duration in seconds
     pub duration_seconds: f64,
 }
@@ -89,6 +97,7 @@ impl DialogPipeline {
         Ok(Dialog {
             turns: assign_speakers(&words, &diarization.exclusive_segments),
             text: transcription.text,
+            speakers: diarization.speaker_centroids(),
             segments: diarization.segments,
             duration_seconds: transcription.duration_seconds,
         })
