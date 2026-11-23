@@ -985,7 +985,7 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "speakrs"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "crossbeam-channel",
  "cudakit",
@@ -1010,15 +1010,15 @@ dependencies = [
 
 [[package]]
 name = "speakrs-ptx-sm120"
-version = "0.8.0"
+version = "0.8.1"
 
 [[package]]
 name = "speakrs-ptx-sm75"
-version = "0.8.0"
+version = "0.8.1"
 
 [[package]]
 name = "speakrs-ptx-sm80"
-version = "0.8.0"
+version = "0.8.1"
 
 [[package]]
 name = "stacker"
