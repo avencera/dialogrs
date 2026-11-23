@@ -20,8 +20,9 @@ pub struct Dialog {
     /// recordings: a 256-d L2-normalised mean of the speaker's chunk embeddings,
     /// with the chunk count and speech seconds behind it
     ///
-    /// Labels match [`Turn::speaker`] and [`Segment::speaker`]. A label has no
-    /// centroid only when no usable embedding went into its cluster; see
+    /// Labels match [`Turn::speaker`] and [`Segment::speaker`], and each appears in
+    /// `segments`. A label in `segments` has no centroid only when no usable
+    /// embedding went into its cluster; see
     /// [`speakrs::DiarizationResult::speaker_centroids`]
     pub speakers: Vec<SpeakerCentroid>,
     /// Input duration in seconds

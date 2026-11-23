@@ -97,6 +97,10 @@ speakrs `cuda` is the default. `cuda-fast` diarizes with a 2 s step instead of
 set except Earnings-21. It also gets the number of speakers right less often:
 137 of 212 recordings against 163 for `cuda`.
 
+These numbers were measured in October 2026, before speakrs 0.8. In speakrs 0.8,
+`cuda` gives the same output, but `cuda-fast` drops speakers whose VBx prior is at
+most 1e-6 instead of 1e-7, so its rows may differ slightly.
+
 ### Per set
 
 | Set | WER dialogrs | WER WhisperX | cpWER `cuda` | cpWER `cuda-fast` | cpWER WhisperX | DER `cuda` | DER `cuda-fast` | DER WhisperX |
