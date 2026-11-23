@@ -28,10 +28,11 @@ for turn in &dialog.turns {
 }
 ```
 
-`dialog.speakers` gives each speaker label a voice embedding for matching the same
-person across recordings: the L2-normalised mean of the speaker's 256-d chunk
-embeddings from speakrs, with the number of embeddings and the seconds of speech
-behind it, to weight it by:
+`dialog.speakers` holds speaker voice embeddings for matching the same person
+across recordings: for each label, the L2-normalised mean of the speaker's 256-d
+chunk embeddings from speakrs, with the number of embeddings and the seconds of
+speech behind it, to weight it by. A label with no usable embedding, which is
+rare, has no entry, so look labels up rather than assume one per speaker:
 
 ```rust,ignore
 for speaker in &dialog.speakers {
@@ -62,7 +63,7 @@ builds and tests dialogrs on Windows, but it hasn't yet run on a Windows GPU.
 
 `examples/bench.rs` runs a directory of 16 kHz mono wavs, and
 `bench/whisperx/run.py` runs WhisperX on the same files with the same output
-layout. `bench/sets.py` builds the benchmark sets, `bench/mixed.sh` runs both
+layout, apart from the speaker centroids only dialogrs writes. `bench/sets.py` builds the benchmark sets, `bench/mixed.sh` runs both
 pipelines over them, and `bench/score.py` scores WER, cpWER (speaker-attributed
 WER) and DER.
 
@@ -99,7 +100,8 @@ set except Earnings-21. It also gets the number of speakers right less often:
 
 These numbers were measured in October 2026, before speakrs 0.8. In speakrs 0.8,
 `cuda` gives the same output, but `cuda-fast` drops speakers whose VBx prior is at
-most 1e-6 instead of 1e-7, so its rows may differ slightly.
+most 1e-6 instead of 1e-7, so its rows may differ: on one CHiME-6 recording,
+that change took `cuda-fast` diarization from 30.4 s to 2.2 s.
 
 ### Per set
 

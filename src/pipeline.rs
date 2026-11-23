@@ -16,7 +16,7 @@ pub struct Dialog {
     pub text: String,
     /// Diarization with overlapping speech kept, for RTTM output and DER
     pub segments: Vec<Segment>,
-    /// Each speaker's voice embedding, in label order, for matching speakers across
+    /// Speaker voice embeddings, in label order, for matching speakers across
     /// recordings: a 256-d L2-normalised mean of the speaker's chunk embeddings,
     /// with the chunk count and speech seconds behind it
     ///

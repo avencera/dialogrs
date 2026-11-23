@@ -4,8 +4,10 @@
 //! Loads every file first, runs the first once untimed as warmup, then times each
 //! file from preloaded audio to attributed turns. Writes, per file, `<id>.json`
 //! (turns: speaker, start, end, text; speakers: label, chunk count, speech seconds
-//! and centroid embedding) and `<id>.rttm` (diarization with overlap, for DER), plus `texts.json` ({id: text}, for scriptrs' `long_wer.py`) and
-//! `summary.json`; the WhisperX baseline in `bench/whisperx` writes the same layout.
+//! and centroid embedding) and `<id>.rttm` (diarization with overlap, for DER),
+//! plus `texts.json` ({id: text}, for scriptrs' `long_wer.py`) and `summary.json`.
+//! The WhisperX baseline in `bench/whisperx` writes the same layout without
+//! `speakers`, which the scorer doesn't read
 //! `--language <code>` decodes with that language's filter (v3), as WhisperX's
 //! `language` does, instead of automatic language selection
 //!
