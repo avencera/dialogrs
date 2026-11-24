@@ -4,7 +4,7 @@ All notable changes to dialogrs are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.0] - 2026-11-23
 
 ### Added
 
@@ -16,6 +16,7 @@ All notable changes to dialogrs are listed here. The format follows
 - `Dialog::speakers` holds a `SpeakerCentroid` from speakrs for each speaker label
   with a usable embedding: the L2-normalised mean of the speaker's 256-d chunk
   embeddings, with the number of embeddings and seconds of speech behind it, for
-  matching the same person across recordings. The bench example writes them to each `<id>.json`.
+  matching the same person across recordings. The bench example writes them to
+  each `<id>.json`.
 
-[Unreleased]: https://github.com/avencera/dialogrs/commits/master
+[0.1.0]: https://github.com/avencera/dialogrs/releases/tag/v0.1.0
