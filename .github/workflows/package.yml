@@ -1,26 +1,31 @@
-# Check the crate as crates.io receives it, and publish it and a GitHub release from
-# a version tag
+# Build, test and publish dialogrs: the Python wheels and sdist, the crate, and a
+# GitHub release, all from one version tag
 #
 # To release:
 #   1. release any scriptrs or speakrs changes dialogrs needs, raise their version
-#      requirements in Cargo.toml to match, and set SCRIPTRS_REF and SPEAKRS_REF
-#      below to those releases' tags
-#   2. set the version in Cargo.toml
+#      requirements in Cargo.toml to match, set SCRIPTRS_REF and SPEAKRS_REF below
+#      to those releases' tags, and refresh crates/dialogrs-python/Cargo.lock with
+#      ../scriptrs and ../speakrs checked out at those tags
+#   2. set the version in Cargo.toml and crates/dialogrs-python/Cargo.toml
 #   3. rename the CHANGELOG.md "Unreleased" section to "[X.Y.Z] - YYYY-MM-DD" and
 #      update the compare links at the bottom
 #   4. merge, then tag the merge commit and push the tag:
 #        git tag vX.Y.Z
 #        git push origin vX.Y.Z
 #
-# The tag checks the crate's version and changelog entry, then the crates-io
-# environment waits for a reviewer. Once approved, the workflow publishes the crate
-# to crates.io, then a GitHub release with the tag's CHANGELOG.md entry as its notes.
-# A tag whose version or changelog entry is wrong fails before anything is published.
-# crates.io trusts this workflow through OIDC, so no token is stored. A version
-# already on crates.io is skipped, so "Re-run failed jobs" finishes a partial release.
+# The tag checks the versions and changelog entry, publishes the Python package to
+# TestPyPI and installs that release. The pypi environment then waits for a reviewer,
+# and once approved the workflow publishes the Python package to PyPI, then, once the
+# crates-io environment's reviewer approves, the crate to crates.io, then a GitHub
+# release with the tag's CHANGELOG.md entry as its notes and the wheels and sdist
+# attached. A tag whose version or changelog entry is wrong fails before anything is
+# published. PyPI, TestPyPI and crates.io trust this workflow through OIDC, so no
+# token is stored. Every publish skips what is already uploaded, so "Re-run failed
+# jobs" finishes a partial release.
 #
-# crates.io accepts a trusted publisher only for a crate that exists, so the first
-# version is published by hand with an API token before its tag is pushed
+# PyPI and TestPyPI take a pending trusted publisher before a project's first upload.
+# crates.io accepts one only for a crate that exists, so its first version was
+# published by hand with an API token
 
 name: Package
 
@@ -47,7 +52,9 @@ env:
   # cargo needs each path dependency's version to satisfy Cargo.toml's requirement,
   # so packaging checks out the releases it names rather than master, which may
   # already carry the next version
-  SCRIPTRS_REF: v0.5.0
+  # crates/dialogrs-python/Cargo.lock is resolved against these tags, and the wheels
+  # build from them with --locked
+  SCRIPTRS_REF: v0.5.1
   SPEAKRS_REF: v0.8.1
 
 # dialogrs depends on ../scriptrs and ../speakrs by path, so each job that reads the
@@ -92,6 +99,225 @@ jobs:
       - name: Package and build as a dependency
         run: just package --allow-dirty
 
+  # one abi3 wheel per platform, built against the scriptrs and speakrs release tags
+  wheels:
+    name: Wheel (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64, CUDA
+            os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            manylinux: "2_28"
+            rustflags: -D warnings
+          - name: macOS arm64, Core ML
+            os: macos-15
+            target: aarch64-apple-darwin
+            manylinux: "off"
+            rustflags: -D warnings
+          # the C runtime is linked statically, so the extension runs without the
+          # Visual C++ redistributable whichever Python loads it. RUSTFLAGS replaces the
+          # per-target flags rather than adding to them, so each target spells out its
+          # full set
+          - name: Windows x86_64, CUDA
+            os: windows-2025
+            target: x86_64-pc-windows-msvc
+            manylinux: "off"
+            rustflags: -D warnings -C target-feature=+crt-static
+    env:
+      RUSTFLAGS: ${{ matrix.rustflags }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: dialogrs
+
+      - uses: ./dialogrs/.github/actions/siblings
+        with:
+          scriptrs-ref: ${{ env.SCRIPTRS_REF }}
+          speakrs-ref: ${{ env.SPEAKRS_REF }}
+
+      # a Windows checkout without symlink support writes the LICENSE symlink as a text
+      # file holding its target, which maturin would ship in the wheel as the license;
+      # removing it first keeps cp from writing through a real symlink onto itself
+      - name: Resolve the LICENSE symlink
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          rm -f crates/dialogrs-python/LICENSE
+          cp LICENSE crates/dialogrs-python/LICENSE
+
+      # the manylinux container mounts the whole workspace, siblings included
+      - name: Build wheel
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          command: build
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          working-directory: dialogrs
+          args: --release --locked --out dist -m crates/dialogrs-python/Cargo.toml
+          # tag builds are published, so they never reuse objects from the shared cache
+          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+      - name: Check wheel size
+        shell: bash
+        run: |
+          set -euo pipefail
+          # PyPI rejects files over 100 MB unless the project's limit is raised
+          limit=$((90 * 1000 * 1000))
+          for wheel in dist/*.whl; do
+            size="$(wc -c < "$wheel")"
+            echo "$(basename "$wheel"): $size bytes"
+            test "$size" -le "$limit"
+          done
+
+      # CUDA must load at run time and the C runtime is static, so the extension may
+      # import only Python's stable ABI and Windows system DLLs
+      - name: Check the extension's imports
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          unpacked="$RUNNER_TEMP/wheel"
+          mkdir -p "$unpacked"
+          # 7-Zip ships on the runner image, and a wheel is a zip
+          7z x -y dist/*.whl -o"$unpacked" > /dev/null
+          ext="$(find "$unpacked" -name '_native*.pyd' -print -quit)"
+          test -n "$ext"
+          rustup component add llvm-tools
+          readobj="$(cygpath -u "$(rustc --print sysroot)")/lib/rustlib/x86_64-pc-windows-msvc/bin/llvm-readobj.exe"
+          # a Windows tool's output ends lines with CRLF
+          imports="$("$readobj" --coff-imports "$ext" | tr -d '\r' | sed -n 's/^ *Name: //p' | sort -u)"
+          echo "$imports"
+          if grep -Eiv '^(python3|kernel32|ntdll|advapi32|bcrypt|bcryptprimitives|ws2_32|userenv|secur32|crypt32|ole32|oleaut32|shell32|user32|synchronization|api-ms-win-core-[a-z0-9-]+)\.dll$' <<< "$imports"; then
+            echo "the extension imports a DLL outside Python and Windows itself" >&2
+            exit 1
+          fi
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@v7
+        with:
+          name: python-wheel-${{ matrix.target }}
+          path: dialogrs/dist/*.whl
+
+  sdist:
+    name: Sdist
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: dialogrs
+
+      # release tags are named after the dialogrs version, so a bindings version that
+      # lags behind fails here on the pull request instead of at publish time
+      - name: Check the bindings version matches dialogrs
+        run: |
+          set -euo pipefail
+          crate=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          bindings=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/dialogrs-python/Cargo.toml | head -1)
+          if [ "$crate" != "$bindings" ]; then
+            echo "crates/dialogrs-python is $bindings but dialogrs is $crate; bump crates/dialogrs-python/Cargo.toml"
+            exit 1
+          fi
+
+      - uses: ./dialogrs/.github/actions/siblings
+        with:
+          scriptrs-ref: ${{ env.SCRIPTRS_REF }}
+          speakrs-ref: ${{ env.SPEAKRS_REF }}
+
+      # the sdist carries dialogrs and the scriptrs and speakrs sources it builds from
+      - name: Build sdist
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          command: sdist
+          working-directory: dialogrs
+          args: --out dist -m crates/dialogrs-python/Cargo.toml
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+
+      # pip builds the sdist on platforms without a wheel, so build it the same way,
+      # outside the checkout; the runner has no GPU, so check the import only
+      - name: Install sdist into a fresh environment
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          uv venv --python 3.12 sdist-venv
+          uv pip install --python sdist-venv "$GITHUB_WORKSPACE"/dialogrs/dist/*.tar.gz
+          sdist-venv/bin/python -c "import dialogrs; print(dialogrs.__version__, dialogrs.BACKEND, dialogrs.available_modes())"
+
+      - name: Upload sdist
+        uses: actions/upload-artifact@v7
+        with:
+          name: python-sdist
+          path: dialogrs/dist/*.tar.gz
+
+  tests:
+    name: Tests (${{ matrix.platform.name }}, Python ${{ matrix.python }})
+    needs: wheels
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          # a GitHub runner has no NVIDIA driver, so this checks that the CUDA wheel
+          # imports, merges and attributes words, and fails cleanly before downloading
+          # a model
+          - name: Linux x86_64
+            os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          # transcribes with Core ML and diarizes on the CPU, end to end; Parakeet v2
+          # keeps the download near 0.5 GB
+          - name: macOS arm64
+            os: macos-15
+            target: aarch64-apple-darwin
+          # no NVIDIA driver either, so the same checks as on Linux
+          - name: Windows x86_64
+            os: windows-2025
+            target: x86_64-pc-windows-msvc
+        # the one abi3 wheel serves every version, so test the oldest and the newest
+        python: ["3.11", "3.14"]
+    env:
+      DIALOGRS_TEST_MODEL: parakeet/v2
+      DIALOGRS_TEST_MODE: cpu
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: dialogrs
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+
+      - name: Download wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: python-wheel-${{ matrix.platform.target }}
+          path: dialogrs/dist
+
+      - name: Install wheel into a fresh environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv venv --python ${{ matrix.python }} .venv-wheel
+          uv pip install --python .venv-wheel dist/*.whl pytest numpy
+
+      - name: Run tests
+        shell: bash
+        working-directory: dialogrs/crates/dialogrs-python
+        run: |
+          set -euo pipefail
+          # Windows venvs keep the interpreter in Scripts, not bin
+          python=../../.venv-wheel/bin/python
+          if [ "$RUNNER_OS" = Windows ]; then python=../../.venv-wheel/Scripts/python.exe; fi
+          "$python" -m pytest -rA
+
   # checks a tag before anything is published: the crate's version must match it, and
   # CHANGELOG.md needs its entry, which becomes the GitHub release notes
   release-check:
@@ -126,11 +352,141 @@ jobs:
             exit 1
           fi
 
-  # the crates-io environment's reviewer approves the release here, before anything
-  # is published
+  testpypi-publish:
+    name: Publish to TestPyPI
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [release-check, crate, wheels, sdist, tests]
+    runs-on: ubuntu-24.04
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/dialogrs/
+    permissions:
+      id-token: write
+    steps:
+      - name: Download wheels and sdist
+        uses: actions/download-artifact@v8
+        with:
+          pattern: python-*
+          path: dist
+          merge-multiple: true
+
+      - name: Check files match the tag
+        shell: bash
+        working-directory: .
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          ls -la dist
+          # the Linux, macOS and Windows wheels and the sdist
+          test "$(find dist -type f | wc -l)" -eq 4
+          for file in dist/*; do
+            case "$(basename "$file")" in
+              "dialogrs-${version}"-*.whl | "dialogrs-${version}.tar.gz") ;;
+              *) echo "$file does not match tag $GITHUB_REF_NAME"; exit 1 ;;
+            esac
+          done
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+
+  testpypi-install:
+    name: Install from TestPyPI (${{ matrix.name }})
+    needs: testpypi-publish
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64
+            os: ubuntu-24.04
+          - name: macOS arm64
+            os: macos-15
+          - name: Windows x86_64
+            os: windows-2025
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: dialogrs
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+
+      - name: Install the release and transcribe
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          uv venv --python 3.12 .venv-release
+          # a new release can take a few minutes to appear in the index. Anyone can
+          # upload to TestPyPI, so nothing else is installed from it: these checks
+          # never load cuBLAS, the one dependency
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if uv pip install --python .venv-release --no-cache --no-deps --only-binary dialogrs \
+              --index-url https://test.pypi.org/simple/ "dialogrs==${version}"; then
+              break
+            fi
+            test "$attempt" -lt 10
+            sleep 30
+          done
+          # Windows venvs keep their programs in Scripts, not bin
+          python=.venv-release/bin/python
+          if [ "$RUNNER_OS" = Windows ]; then python=.venv-release/Scripts/python.exe; fi
+          # only the macOS runner can transcribe; the others have no NVIDIA driver, so
+          # loading must fail with the cuda code before any download
+          "$python" - crates/dialogrs-python/tests/data/librispeech-1089-134686-0007.wav <<'EOF'
+          import sys
+
+          import dialogrs
+
+          print(dialogrs.__version__, dialogrs.BACKEND, dialogrs.available_modes())
+          if dialogrs.BACKEND != "coreml":
+              try:
+                  dialogrs.Pipeline.from_pretrained()
+              except dialogrs.DialogrsError as error:
+                  assert error.code == "cuda", error
+                  print(f"loading failed as expected: {error}")
+                  sys.exit(0)
+              sys.exit("loading succeeded on a runner without an NVIDIA driver")
+
+          pipeline = dialogrs.Pipeline.from_pretrained("parakeet/v2", mode="cpu")
+          dialog = pipeline.transcribe_file(sys.argv[1])
+          for turn in dialog.turns:
+              print(turn.speaker, turn.text)
+          assert "indifference" in dialog.text.lower(), dialog.text
+          assert dialog.turns and all(turn.speaker for turn in dialog.turns)
+          EOF
+
+  # the pypi environment's reviewer approves the release here, before anything
+  # outside TestPyPI is published
+  pypi-publish:
+    name: Publish to PyPI
+    needs: testpypi-install
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/project/dialogrs/
+    permissions:
+      id-token: write
+    steps:
+      - name: Download wheels and sdist
+        uses: actions/download-artifact@v8
+        with:
+          pattern: python-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          skip-existing: true
+
+  # the crates-io environment's reviewer approves the crate here
   crates-publish:
     name: Publish to crates.io
-    needs: [release-check, crate]
+    needs: pypi-publish
     runs-on: ubuntu-24.04
     environment:
       name: crates-io
@@ -199,6 +555,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Download wheels and sdist
+        uses: actions/download-artifact@v8
+        with:
+          pattern: python-*
+          path: dist
+          merge-multiple: true
+
       # create-gh-release-action deletes a release that already exists, so a rerun
       # leaves a published release alone and finishes a draft instead of recreating it
       - name: Check for an existing release
@@ -228,15 +591,18 @@ jobs:
           # the tag's CHANGELOG.md entry becomes the release notes
           changelog: CHANGELOG.md
 
-      # the release becomes latest only when no published stable release has a higher
-      # version, so a maintenance release of an older line leaves the newest as latest
-      - name: Publish the release
+      # --clobber replaces files a failed run already attached. The release becomes
+      # latest only when no published stable release has a higher version, so a
+      # maintenance release of an older line leaves the newest one as latest
+      - name: Attach the wheels and sdist, then publish
         if: steps.existing.outputs.state != 'published'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
+          gh release upload "$GITHUB_REF_NAME" dist/* --clobber --repo "$GITHUB_REPOSITORY"
+
           version="${GITHUB_REF_NAME#v}"
           latest=false
           if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
