@@ -154,8 +154,9 @@ class Pipeline:
         The first call downloads the Parakeet model, about 0.6 GB of Core ML
         models on macOS or 2.5 GB of weights on Linux and Windows, and the
         speakrs diarization models into the Hugging Face hub cache; later calls
-        load from the cache. Use :meth:`from_dir` to load models from local
-        directories without the network.
+        load from the cache. Setting ``SCRIPTRS_MODELS_DIR`` loads the Parakeet
+        model from that local directory instead. Use :meth:`from_dir` to load
+        both models from local directories without the network.
 
         ``language`` is an ISO 639-1 code from :attr:`Model.languages`, such as
         ``"de"``; without it, Parakeet v3 detects the language and v2
@@ -222,7 +223,8 @@ class Pipeline:
         """Transcribe and diarize 16 kHz mono audio, giving each word a speaker.
 
         ``samples`` is a 1-D float32 buffer, such as a NumPy array, or a
-        sequence of floats; it is copied before the GIL is released.
+        sequence of floats; it is copied before the GIL is released. Don't write
+        to the buffer from another thread until the call returns.
         """
         return self._native.transcribe(samples)
 

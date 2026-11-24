@@ -21,7 +21,8 @@ for turn in dialog.turns:
 Transcription and diarization run at the same time with the GIL released. The first
 `from_pretrained` downloads the models from Hugging Face into its hub cache: about
 2.5 GB of Parakeet weights on Linux and Windows or 0.6 GB of Core ML models on macOS,
-plus the speakrs diarization models.
+plus the speakrs diarization models. Setting `SCRIPTRS_MODELS_DIR` loads the Parakeet
+model from that local directory instead.
 
 ## Results
 
