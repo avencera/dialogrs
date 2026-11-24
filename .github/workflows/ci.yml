@@ -66,11 +66,18 @@ jobs:
         with:
           tool: just,cargo-deny@0.20.2
 
+      # `just fmt` and `just python-lint` run ruff through uvx
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+
       # `just fmt` rewrites files, so any diff it leaves means the code wasn't formatted
       - name: Format
         run: |
           just fmt
           git diff --exit-code
+
+      - name: Python lints
+        run: just python-lint
 
       - name: Advisories, licenses and sources
         run: just deny

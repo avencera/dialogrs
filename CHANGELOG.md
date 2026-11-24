@@ -4,6 +4,16 @@ All notable changes to dialogrs are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- The `dialogrs` Python package on PyPI: `dialogrs.Pipeline` transcribes and diarizes
+  files or 16 kHz mono samples into speaker turns, with per-speaker voice embeddings,
+  and `words_from_tokens` and `assign_speakers` combine results from the scriptrs
+  and speakrs packages. Wheels run on CUDA on Linux and Windows x86_64 and on Core ML
+  on Apple silicon Macs.
+
 ## [0.1.0] - 2026-11-23
 
 ### Added
@@ -19,4 +29,5 @@ All notable changes to dialogrs are listed here. The format follows
   matching the same person across recordings. The bench example writes them to
   each `<id>.json`.
 
+[Unreleased]: https://github.com/avencera/dialogrs/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/avencera/dialogrs/releases/tag/v0.1.0
