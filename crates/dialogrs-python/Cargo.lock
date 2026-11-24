@@ -231,7 +231,7 @@ dependencies = [
 
 [[package]]
 name = "dialogrs"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "scriptrs",
  "speakrs",
@@ -240,7 +240,7 @@ dependencies = [
 
 [[package]]
 name = "dialogrs-python"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dialogrs",
  "pyo3",

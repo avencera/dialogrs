@@ -6,6 +6,8 @@ All notable changes to dialogrs are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-23
+
 ### Added
 
 - The `dialogrs` Python package on PyPI: `dialogrs.Pipeline` transcribes and diarizes
@@ -29,5 +31,6 @@ All notable changes to dialogrs are listed here. The format follows
   matching the same person across recordings. The bench example writes them to
   each `<id>.json`.
 
-[Unreleased]: https://github.com/avencera/dialogrs/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/avencera/dialogrs/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/avencera/dialogrs/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/avencera/dialogrs/releases/tag/v0.1.0
