@@ -3,9 +3,11 @@
 //!
 //! Loads every file first, runs the first once untimed as warmup, then times each
 //! file from preloaded audio to attributed turns. Writes, per file, `<id>.json`
-//! (turns: speaker, start, end, text) and `<id>.rttm` (diarization with overlap,
-//! for DER), plus `texts.json` ({id: text}, for scriptrs' `long_wer.py`) and
-//! `summary.json`; the WhisperX baseline in `bench/whisperx` writes the same layout.
+//! (turns: speaker, start, end, text; speakers: label, chunk count, speech seconds
+//! and centroid embedding) and `<id>.rttm` (diarization with overlap, for DER),
+//! plus `texts.json` ({id: text}, for scriptrs' `long_wer.py`) and `summary.json`.
+//! The WhisperX baseline in `bench/whisperx` writes the same layout without
+//! `speakers`, which the scorer doesn't read
 //! `--language <code>` decodes with that language's filter (v3), as WhisperX's
 //! `language` does, instead of automatic language selection
 //!
@@ -132,9 +134,21 @@ fn write_outputs(out: &Path, id: &str, dialog: &Dialog) -> Result<()> {
             })
         })
         .collect();
+    let speakers: Vec<_> = dialog
+        .speakers
+        .iter()
+        .map(|speaker| {
+            json!({
+                "label": speaker.label,
+                "chunk_count": speaker.chunk_count,
+                "speech_seconds": speaker.speech_seconds,
+                "embedding": speaker.embedding,
+            })
+        })
+        .collect();
     fs::write(
         out.join(format!("{id}.json")),
-        serde_json::to_string_pretty(&json!({ "turns": turns }))?,
+        serde_json::to_string_pretty(&json!({ "turns": turns, "speakers": speakers }))?,
     )?;
 
     let rttm: String = dialog

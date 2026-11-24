@@ -48,7 +48,7 @@ env:
   # so packaging checks out the releases it names rather than master, which may
   # already carry the next version
   SCRIPTRS_REF: v0.5.0
-  SPEAKRS_REF: v0.7.0
+  SPEAKRS_REF: v0.8.1
 
 # dialogrs depends on ../scriptrs and ../speakrs by path, so each job that reads the
 # manifest checks all three out side by side and runs in ./dialogrs

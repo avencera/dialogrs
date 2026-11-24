@@ -13,5 +13,9 @@ All notable changes to dialogrs are listed here. The format follows
 - `words_from_tokens` merges scriptrs's subword tokens into `Word`s with timestamps,
   and `assign_speakers` gives each word the speaker whose turn it falls in.
 - The `cuda` feature runs both on an NVIDIA GPU on Linux or Windows x86_64.
+- `Dialog::speakers` holds a `SpeakerCentroid` from speakrs for each speaker label
+  with a usable embedding: the L2-normalised mean of the speaker's 256-d chunk
+  embeddings, with the number of embeddings and seconds of speech behind it, for
+  matching the same person across recordings. The bench example writes them to each `<id>.json`.
 
 [Unreleased]: https://github.com/avencera/dialogrs/commits/master
