@@ -4,10 +4,19 @@
 
 fmt:
     cargo fmt
+    cargo fmt --manifest-path crates/dialogrs-python/Cargo.toml
+    uvx ruff@0.17.4 format crates/dialogrs-python
 
-# advisories, licenses and sources
+# ruff's lints for the Python package; `just fmt` runs its formatter. ruff is pinned
+# because a release that restyles code would fail CI's formatting check
+python-lint:
+    uvx ruff@0.17.4 check crates/dialogrs-python
+
+# advisories, licenses and sources for the crate and the Python bindings, which are
+# separate workspaces
 deny:
     cargo deny --all-features check
+    cargo deny --manifest-path crates/dialogrs-python/Cargo.toml --all-features check
 
 # the docs as docs.rs builds them
 doc:
@@ -15,6 +24,7 @@ doc:
 
 clippy:
     cargo clippy --all-targets --features cuda -- -D warnings
+    cargo clippy --manifest-path crates/dialogrs-python/Cargo.toml --all-targets -- -D warnings
 
 # unit tests only; the pipeline itself needs a GPU and models
 test *args:
@@ -57,7 +67,30 @@ package *args:
 
 check:
     just fmt
+    just python-lint
     just deny
     just clippy
     just doc
     just test
+
+# build the Python wheel for this platform into crates/dialogrs-python/target/wheels,
+# without the manylinux check that CI runs in its container
+python-build:
+    uvx --from 'maturin>=1.9,<2' maturin build --release --locked --auditwheel skip -m crates/dialogrs-python/Cargo.toml
+
+# install the wheel into a fresh environment and run its tests; on Linux the model
+# tests need the GPU, so submit `just python-test -m model` through the homebased
+# GPU queue there, and run `just python-test -m "not model"` directly
+python-test *args: python-build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd crates/dialogrs-python
+    venv=target/python-test-venv
+    rm -rf "$venv"
+    uv venv -q --python 3.12 "$venv"
+    version=$(cargo pkgid | sed 's/.*[#@]//')
+    uv pip install -q --python "$venv" "target/wheels/dialogrs-${version}"-*.whl pytest numpy
+    # Windows venvs keep the interpreter in Scripts, not bin
+    python="$venv/bin/python"
+    if [ -x "$venv/Scripts/python.exe" ]; then python="$venv/Scripts/python.exe"; fi
+    "$python" -m pytest -rA {{args}}

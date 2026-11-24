@@ -51,7 +51,27 @@ dialogrs = { version = "0.1", features = ["cuda"] }
 To work on dialogrs itself, check out scriptrs and speakrs beside it
 (`../scriptrs`, `../speakrs`), which it builds against; the published crate
 uses their crates.io releases instead. `just check` runs the same formatting,
-dependency, lint, docs and test checks as CI.
+dependency, lint, docs and test checks as CI, and `just python-test` builds the
+Python wheel and runs its tests.
+
+## Python
+
+```sh
+pip install dialogrs
+```
+
+```python
+import dialogrs
+
+pipeline = dialogrs.Pipeline.from_pretrained()  # Parakeet v3 + speakrs
+dialog = pipeline.transcribe_file("meeting.wav")
+for turn in dialog.turns:
+    print(f"{turn.speaker} [{turn.start:.1f}-{turn.end:.1f}] {turn.text}")
+```
+
+The wheels run on CUDA on Linux and Windows x86_64 and, in Python, also on Core ML
+on Apple silicon Macs. `dialog.speakers` holds the same voice embeddings as in Rust.
+The [Python README](crates/dialogrs-python/README.md) covers the options.
 
 On Windows, the NVIDIA driver provides `nvcuda.dll`. You also need cuBLAS 12 or
 13 and, for speakrs, cuDNN 9. cudakit finds them on `PATH` or under

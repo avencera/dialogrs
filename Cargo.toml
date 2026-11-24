@@ -3,8 +3,9 @@ name = "dialogrs"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.96"
-# the benchmark scripts and their results stay in the repository
-exclude = ["bench/", "assets/", "greptile.json"]
+# the benchmark scripts and their results, and the Python bindings, stay in the
+# repository
+exclude = ["bench/", "assets/", "crates/", "greptile.json"]
 authors = ["Praveen Perera"]
 description = "Speaker-attributed transcription: scriptrs for what was said, speakrs for who said it"
 license = "Apache-2.0"

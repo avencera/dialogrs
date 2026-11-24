@@ -1,0 +1,67 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "dialogrs"
+dynamic = ["version"]
+description = "Fast speaker-attributed transcription: Parakeet speech-to-text and speaker diarization on CUDA (Linux and Windows) and Core ML (macOS)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Praveen Perera" }]
+keywords = ["speech-to-text", "diarization", "transcription", "parakeet", "speaker", "cuda", "coreml"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Rust",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+# the CUDA speech-to-text encoder runs every matrix multiply through cuBLAS. Not
+# every cuBLAS 12 release has a Windows wheel, and pip takes the newest one that does
+dependencies = [
+    "nvidia-cublas-cu12>=12.4; (sys_platform == 'linux' and platform_machine == 'x86_64') or (sys_platform == 'win32' and platform_machine == 'AMD64')",
+]
+
+[project.optional-dependencies]
+# cuDNN for the speakrs layers without a speakrs kernel, which its CUDA modes fall
+# back to only on some GPUs
+cudnn = [
+    "nvidia-cudnn-cu12>=9,<10; (sys_platform == 'linux' and platform_machine == 'x86_64') or (sys_platform == 'win32' and platform_machine == 'AMD64')",
+]
+
+[project.urls]
+Repository = "https://github.com/avencera/dialogrs"
+Documentation = "https://github.com/avencera/dialogrs/blob/master/crates/dialogrs-python/README.md"
+Changelog = "https://github.com/avencera/dialogrs/blob/master/CHANGELOG.md"
+
+[dependency-groups]
+test = ["pytest>=8", "numpy>=1.26"]
+
+[tool.maturin]
+module-name = "dialogrs._native"
+python-source = "python"
+features = ["pyo3/extension-module"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["model: downloads and runs the models, so it needs a backend"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint.isort]
+known-first-party = ["dialogrs", "conftest"]
