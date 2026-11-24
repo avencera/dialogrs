@@ -48,6 +48,9 @@ if TYPE_CHECKING:
         def __array_interface__(self) -> dict[str, Any]: ...
 
     Samples = Buffer | _ArrayInterface | Sequence[float]
+else:
+    # a runtime name too, so typing.get_type_hints resolves the annotations
+    Samples = object
 
 try:
     __version__ = metadata.version("dialogrs")
@@ -151,8 +154,8 @@ class Pipeline:
         The first call downloads the Parakeet model, about 0.6 GB of Core ML
         models on macOS or 2.5 GB of weights on Linux and Windows, and the
         speakrs diarization models into the Hugging Face hub cache; later calls
-        load from the cache. Setting ``SCRIPTRS_MODELS_DIR`` or
-        ``SPEAKRS_MODELS_DIR`` loads that model from a local directory instead.
+        load from the cache. Use :meth:`from_dir` to load models from local
+        directories without the network.
 
         ``language`` is an ISO 639-1 code from :attr:`Model.languages`, such as
         ``"de"``; without it, Parakeet v3 detects the language and v2

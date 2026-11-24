@@ -9,6 +9,7 @@ use dialogrs::DialogError;
 use pyo3::prelude::*;
 use scriptrs::{ParakeetDeployment, TranscriptionError};
 use speakrs_sdk::speakrs::PipelineError;
+use speakrs_sdk::speakrs::inference::ModelLoadError;
 
 pyo3::import_exception!(dialogrs._errors, DialogrsError);
 
@@ -83,6 +84,13 @@ fn transcription_code(error: &TranscriptionError) -> &'static str {
 /// Stable code for a diarization failure
 fn diarization_code(error: &PipelineError) -> &'static str {
     match error {
+        PipelineError::ModelLoad(ModelLoadError::HfHub(_)) => "model_download",
+        // a CUDA mode reports its failed download with the assets it needed
+        #[cfg(all(
+            any(target_os = "linux", target_os = "windows"),
+            target_arch = "x86_64"
+        ))]
+        PipelineError::ModelLoad(ModelLoadError::CudaAssetsUnavailable { .. }) => "model_download",
         PipelineError::ModelLoad(_) => "model_load",
         PipelineError::UnsupportedExecutionMode(_) => "unsupported_mode",
         _ => "diarization",

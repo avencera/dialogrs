@@ -40,12 +40,23 @@ pub(crate) fn extract(samples: &Bound<'_, PyAny>) -> PyResult<Vec<f32>> {
 
     let aligned = buffer.buf_ptr().cast::<f32>().is_aligned();
     if byte_order == ByteOrder::Native && buffer.is_c_contiguous() && aligned {
-        // SAFETY: the buffer is 1-D, C-contiguous, aligned, native-endian float32,
-        // and the export keeps its memory alive while the GIL is held for the copy
-        let slice = unsafe {
-            std::slice::from_raw_parts(buffer.buf_ptr().cast::<f32>(), buffer.item_count())
-        };
-        return Ok(slice.to_vec());
+        // copied through raw pointers rather than a `&[f32]`, since another thread
+        // that released the GIL, such as a NumPy operation, may write to the buffer
+        // while it is read, and a Rust shared slice promises that nothing does
+        let count = buffer.item_count();
+        let mut samples = Vec::<f32>::with_capacity(count);
+        // SAFETY: the buffer is 1-D, C-contiguous, aligned, native-endian float32
+        // with `count` items, the export keeps its memory alive for the copy, and
+        // the destination has room for `count` items
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                buffer.buf_ptr().cast::<f32>(),
+                samples.as_mut_ptr(),
+                count,
+            );
+            samples.set_len(count);
+        }
+        return Ok(samples);
     }
 
     // strided, unaligned, or byte-swapped buffers are read one item at a time

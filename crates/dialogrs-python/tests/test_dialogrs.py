@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import platform
 import sys
+import typing
 from types import SimpleNamespace
 
 import pytest
@@ -33,6 +34,11 @@ def test_backend_and_modes_match_platform():
     else:
         assert dialogrs.BACKEND is None
         assert dialogrs.available_modes() == ["CPU"]
+
+
+def test_annotations_resolve_at_runtime():
+    hints = typing.get_type_hints(dialogrs.Pipeline.transcribe)
+    assert hints["return"] is dialogrs.Dialog
 
 
 def test_model_names_resolve_to_one_enum():

@@ -15,7 +15,9 @@ import dialogrs
 from dialogrs._cuda import driver_path
 
 DATA = Path(__file__).resolve().parent / "data"
-# LibriSpeech test-clean 1089-134686-0007, CC BY 4.0
+# LibriSpeech test-clean 1089-134686-0007 (https://www.openslr.org/12/), by Vassil
+# Panayotov, Guoguo Chen, Daniel Povey and Sanjeev Khudanpur, from LibriVox
+# recordings; CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
 CLIP = DATA / "librispeech-1089-134686-0007.wav"
 CLIP_TEXT = "a cold lucid indifference reigned in his soul"
 # DIALOGRS_TEST_MODEL=parakeet/v2 keeps CI's download smaller than the v3 default
